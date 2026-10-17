@@ -1,6 +1,5 @@
 /**
  * 中国天气网 - Egern 小组件（模块版）
- *
  * 数据来源：https://www.weather.com.cn，无需 Key
  */
 
@@ -1287,5 +1286,6 @@ function renderAccessory(m, family) {
       text: `${m.city} ${m.temp}° ${m.weather}`,
     }],
   };
+}
 }
 }
