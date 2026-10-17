@@ -2,9 +2,6 @@
  * 中国天气网 - Egern 小组件（模块版）
  *
  * 数据来源：https://www.weather.com.cn，无需 Key
- * 接口：d1.weather.com.cn/weather_index/{城市代码}.html（实况 + 今天 + 5 天 + 生活指数）
- *      + www.weather.com.cn/weather/{城市代码}.shtml（7 天预报）
- * 城市：模块里填中文城市名，内置全国 3072 个城市代码映射（地级市 + 区县），未命中时调搜索接口查询
  */
 
 export default async function (ctx) {
@@ -13,6 +10,7 @@ export default async function (ctx) {
   const widgetFamily = safeCtx.widgetFamily || 'systemMedium';
 
   const cityName = (env.CITY || '海口').trim() || '海口';
+  const userName = (env.USER_NAME || '').trim();
 
   try {
     const { code, city } = await getCityCode(safeCtx, cityName);
@@ -28,7 +26,7 @@ export default async function (ctx) {
       return renderSmall(model);
     }
     if (widgetFamily === 'systemLarge') {
-      return renderLarge(model);
+      return renderLarge(model, userName);
     }
     return renderMedium(model);
   } catch (e) {
@@ -1128,7 +1126,7 @@ function getNextTwoHolidays() {
   return out;
 }
 
-function renderLarge(m) {
+function renderLarge(m, userName) {
   const T = { light: '#1C1C1E', dark: '#F2F2F7' };
   const S = { light: '#8E8E93', dark: '#AEAEB2' };
   const { icon, color } = iconFromText(m.weather);
@@ -1226,7 +1224,7 @@ function renderLarge(m) {
             type: 'stack', direction: 'column', alignItems: 'center',
             children: [
               { type: 'text', text: String(d.getDate()), font: { size: 68, weight: 'bold' }, textColor: T, maxLines: 1 },
-              { type: 'text', text: greeting + '!', font: { size: 14, weight: 'semibold' }, textColor: S, maxLines: 1 },
+              { type: 'text', text: userName ? `${userName}，${greeting}！` : greeting + '!', font: { size: 14, weight: 'semibold' }, textColor: S, maxLines: 1 },
             ],
           },
         ],
