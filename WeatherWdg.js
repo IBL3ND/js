@@ -661,18 +661,22 @@ async function fetch7Day(ctx, code) {
       const li = m[1];
       const h1 = (li.match(/<h1>([^<]+)<\/h1>/) || [,''])[1];
       const wea = (li.match(/<p[^>]*class="wea"[^>]*>([^<]+)<\/p>/) || [,''])[1];
-      const tem = li.match(/<p[^>]*class="tem"[^>]*>\s*<span>([^<]+)<\/span>\/<i>([^<]+)<\/i>/);
+      let tem = li.match(/<p[^>]*class="tem"[^>]*>\s*<span>([^<]+)<\/span>\/<i>([^<]+)<\/i>/);
+      if (!tem) {
+        const lowOnly = li.match(/<p[^>]*class="tem"[^>]*>\s*<i>([^<]+)<\/i>/);
+        if (lowOnly) tem = [null, '', lowOnly[1]];
+      }
       const dayCode = (li.match(/png40 d([0-9]+)/) || [,''])[1];
       const nightCode = (li.match(/png40 n([0-9]+)/) || [,''])[1];
       const win = (li.match(/<p[^>]*class="win"[^>]*>[\s\S]*?<i>([^<]+)<\/i>/) || [,''])[1];
-      if (!h1 || !tem) continue;
+      if (!h1) continue;
       const datePart = h1.split('（')[0] || '';
       const weekPart = (h1.match(/\uff08([^\uff09]+)\uff09/) || [,''])[1];
       days.push({
         date: datePart,
         week: weekPart || '',
-        tempMax: (tem[1] || '').trim(),
-        tempMin: (tem[2] || '').replace('℃', '').trim(),
+        tempMax: tem ? (tem[1] || '').trim().replace('℃', '') : '',
+        tempMin: tem ? (tem[2] || '').replace('℃', '').trim() : '',
         codeDay: dayCode || '',
         codeNight: nightCode || '',
         textDay: (wea || '').trim(),
@@ -705,6 +709,11 @@ function buildModel(data, city) {
       windDay: d.windDay || '',
       windNight: d.windNight || '',
     }));
+    if (daily7[0] && !daily7[0].tempMax && fcList[0]) {
+      daily7[0].tempMax = fcList[0].fc || '';
+      daily7[0].tempMin = daily7[0].tempMin || fcList[0].fd || '';
+      if (!daily7[0].codeDay && fcList[0].fa) daily7[0].codeDay = String(fcList[0].fa);
+    }
     const zs2 = (data.dataZS && data.dataZS.zs) || {};
     const life2 = [];
     const lifeMap2 = [['ct', '穿衣'], ['xc', '洗车'], ['uv', '紫外线'], ['gm', '感冒']];
@@ -953,7 +962,7 @@ function renderMedium(m) {
     `<circle cx='${dotX}' cy='${barH / 2}' r='5' fill='%23FFFFFF' opacity='0.95'/>` +
     `</svg>`;
   const forecastCells = [];
-  for (let i = 1; i <= 6 && m.daily && m.daily[i]; i++) {
+  for (let i = 0; i <= 6 && m.daily && m.daily[i]; i++) {
     const d = m.daily[i];
     const { icon: dic, color: dcolor } = iconFromCode(d.codeDay);
     forecastCells.push({
@@ -1278,4 +1287,5 @@ function renderAccessory(m, family) {
       text: `${m.city} ${m.temp}° ${m.weather}`,
     }],
   };
+}
 }
