@@ -1287,5 +1287,3 @@ function renderAccessory(m, family) {
     }],
   };
 }
-}
-}
