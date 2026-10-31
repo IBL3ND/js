@@ -74,9 +74,8 @@
                 const options = readOptions({
 
                     blockUpload: true,
+
                     blockShorts: false,
-                    blockAi: true,
-                    onTheGo: true,
 
                 });
 
@@ -116,11 +115,9 @@
 
                 const { clientKey } = readConfig()[platform] ?? {};
 
-                if (!clientKey)
+                if (!clientKey) return $done({});
 
-                    throw new Error("YouTubeConfig requires stored clientKey");
-
-                if (!$response.body) throw new Error("YouTubeConfig requires body");
+                if (!$response.body) return $done({});
 
                 const options = readOptions({ blockGames: true });
 
@@ -142,17 +139,7 @@
 
                 console.log(String(error));
 
-                clearKeys(platform);
-
-                $done({
-
-                    status: 200,
-
-                    headers: { "Content-Type": "text/plain" },
-
-                    body: new Uint8Array(),
-
-                });
+                $done({});
 
             }
 
@@ -461,8 +448,6 @@
             /^(?:shopping_|products?_in_video_)[a-z0-9_]+\.eml(?:-js)?(?:-fe)?$/;
 
         const AD_TRACKING = textEncoder.encode("/pagead/");
-        const AI_SUMMARY = textEncoder.encode("ai_summary_");
-        const AI_CHAT = textEncoder.encode("PAyouchat");
 
         const GAME_CARD = textEncoder.encode("mini_game_card.eml");
 
@@ -584,7 +569,7 @@
 
         }
 
-        function isBlockedItem(item, blockGames, blockVerticalLive, blockStore, blockAi) {
+        function isBlockedItem(item, blockGames, blockVerticalLive, blockStore) {
 
             let ad = false;
 
@@ -615,9 +600,6 @@
                 )
 
                     ad = true;
-                if (blockAi && layout?.startsWith("ai_summary"))
-                    ad = true;
-
 
                 if (
 
@@ -661,59 +643,6 @@
 
         }
 
-        function stripAiBytes(bytes) {
-            let fields;
-            try {
-                fields = wireFields(bytes);
-            } catch {
-                return containsMarker(bytes, AI_CHAT) ? new Uint8Array() : bytes;
-            }
-            let changed = false;
-            const kept = [];
-            for (const field of fields) {
-                if (field.wire !== 2 || !containsMarker(field.data, AI_CHAT)) {
-                    kept.push(field.raw);
-                    continue;
-                }
-                const stripped = stripAiBytes(field.data);
-                if (stripped.length) {
-                    kept.push(encodeField([field.no, "", "bytes"], stripped));
-                }
-                changed = true;
-            }
-            return changed ? concatBytes(kept) : bytes;
-        }
-
-        function removeAiFields(message) {
-            let changed = false;
-            visitObjects(message, (object) => {
-                const state = object[wireState];
-                if (!state?.fields) return;
-                let objectChanged = false;
-                const kept = [];
-                for (const field of state.fields) {
-                    if (field.spec || field.wire !== 2 || !containsMarker(field.data, AI_CHAT)) {
-                        kept.push(field);
-                        continue;
-                    }
-                    const stripped = stripAiBytes(field.data);
-                    if (stripped.length) {
-                        kept.push({
-                            ...field,
-                            data: stripped,
-                            raw: encodeField([field.no, "", "bytes"], stripped),
-                        });
-                    }
-                    objectChanged = true;
-                }
-                if (objectChanged) {
-                    state.fields = kept;
-                    changed = true;
-                }
-            });
-            return changed;
-        }
-
         function transformContent(
 
             message,
@@ -727,16 +656,12 @@
                 jumpAhead = true,
 
                 blockStore = true,
-                blockAi = true,
-                onTheGo = true,
 
             } = {},
 
         ) {
 
-            let changed = transformMenus(message, { onTheGo });
-
-            if (blockAi) changed = removeAiFields(message) || changed;
+            let changed = transformMenus(message);
 
             const emptied = new WeakSet();
 
@@ -753,9 +678,6 @@
                 )
 
                     emptied.add(object);
-                if (blockAi && layout?.startsWith("ai_summary"))
-                    emptied.add(object);
-
 
                 if (jumpAhead && object.smartSkipButton)
 
@@ -779,7 +701,17 @@
 
                         (item) =>
 
-                            !isBlockedItem(item, blockGames, blockVerticalLive, blockStore, blockAi),
+                            !isBlockedItem(
+
+                                item,
+
+                                blockGames,
+
+                                blockVerticalLive,
+
+                                blockStore,
+
+                            ),
 
                     );
 
@@ -963,7 +895,7 @@
 
         }
 
-        function transformMenus(message, { onTheGo = true } = {}) {
+        function transformMenus(message) {
 
             const overlay = message.playerOverlays?.renderer;
 
@@ -976,7 +908,6 @@
                 const changed = !sameBytes(menu, overlay.overflowMenu);
 
                 overlay.overflowMenu = menu;
-
 
                 return changed;
 
