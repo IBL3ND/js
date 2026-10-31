@@ -65,13 +65,7 @@
 
                 console.log("YouTube request: " + error);
 
-                if (path.endsWith("/initplayback")) {
-
-                    clearKeys(platform);
-
-                    $done(emptyPlayback());
-
-                } else $done({});
+                $done({});
 
             }
 
@@ -123,9 +117,7 @@
 
                 return {};
 
-            clearKeys(platform);
-
-            return emptyPlayback();
+            return {};
 
         }
 
