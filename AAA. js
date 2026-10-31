@@ -661,6 +661,59 @@
 
         }
 
+        function stripAiBytes(bytes) {
+            let fields;
+            try {
+                fields = wireFields(bytes);
+            } catch {
+                return containsMarker(bytes, AI_CHAT) ? new Uint8Array() : bytes;
+            }
+            let changed = false;
+            const kept = [];
+            for (const field of fields) {
+                if (field.wire !== 2 || !containsMarker(field.data, AI_CHAT)) {
+                    kept.push(field.raw);
+                    continue;
+                }
+                const stripped = stripAiBytes(field.data);
+                if (stripped.length) {
+                    kept.push(encodeField([field.no, "", "bytes"], stripped));
+                }
+                changed = true;
+            }
+            return changed ? concatBytes(kept) : bytes;
+        }
+
+        function removeAiFields(message) {
+            let changed = false;
+            visitObjects(message, (object) => {
+                const state = object[wireState];
+                if (!state?.fields) return;
+                let objectChanged = false;
+                const kept = [];
+                for (const field of state.fields) {
+                    if (field.spec || field.wire !== 2 || !containsMarker(field.data, AI_CHAT)) {
+                        kept.push(field);
+                        continue;
+                    }
+                    const stripped = stripAiBytes(field.data);
+                    if (stripped.length) {
+                        kept.push({
+                            ...field,
+                            data: stripped,
+                            raw: encodeField([field.no, "", "bytes"], stripped),
+                        });
+                    }
+                    objectChanged = true;
+                }
+                if (objectChanged) {
+                    state.fields = kept;
+                    changed = true;
+                }
+            });
+            return changed;
+        }
+
         function transformContent(
 
             message,
@@ -682,6 +735,8 @@
         ) {
 
             let changed = transformMenus(message, { onTheGo });
+
+            if (blockAi) changed = removeAiFields(message) || changed;
 
             const emptied = new WeakSet();
 
