@@ -1,3 +1,5 @@
+
+
         const textEncoder = new TextEncoder();
 
         const utf8 = new TextDecoder("utf-8", { fatal: true });
@@ -615,14 +617,6 @@
                     ad = true;
                 if (blockAi && layout?.startsWith("ai_summary"))
                     ad = true;
-                if (blockAi)
-                    for (const value of Object.values(object))
-                        if (typeof value === "string" && value.includes("PAyouchat"))
-                            ad = true;
-                if (blockAi)
-                    for (const field of unknownFields(object))
-                        if (field.wire === 2 && (containsMarker(field.data, AI_SUMMARY) || containsMarker(field.data, AI_CHAT)))
-                            ad = true;
 
 
                 if (
