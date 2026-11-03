@@ -1,4 +1,3 @@
-
         const textEncoder = new TextEncoder();
 
         const utf8 = new TextDecoder("utf-8", { fatal: true });
@@ -114,11 +113,9 @@
 
                 const { clientKey } = readConfig()[platform] ?? {};
 
-                if (!clientKey)
+                if (!clientKey) return $done({});
 
-                    throw new Error("YouTubeConfig requires stored clientKey");
-
-                if (!$response.body) throw new Error("YouTubeConfig requires body");
+                if (!$response.body) return $done({});
 
                 const options = readOptions({ blockGames: true });
 
@@ -140,17 +137,7 @@
 
                 console.log(String(error));
 
-                clearKeys(platform);
-
-                $done({
-
-                    status: 200,
-
-                    headers: { "Content-Type": "text/plain" },
-
-                    body: new Uint8Array(),
-
-                });
+                $done({});
 
             }
 
