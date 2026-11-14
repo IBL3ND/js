@@ -8,6 +8,7 @@
  *   LUNCH_END    午休结束，例：13:00（不午休就清空）
  *   WORK_END     下班时间，例：18:00
  *   REST_DAYS    本月休息日期号，逗号分隔，例：1,8,15（可留空）
+ *   CUSTOM_DAYS  自定义某天工时和金额，格式：日期号:小时:金额，多条用分号隔开，例：5:5:500;12:3.5:350（可留空）
  *   HOURLY_WAGE  每小时工资，例：100
  */
 
@@ -73,8 +74,17 @@ async function handleWidget(ctx) {
   }
   const inLunch = lunchStart ? now.getTime() >= lunchStart.getTime() && now.getTime() < lunchEnd.getTime() : false;
   const restSet = new Set(String(env.REST_DAYS || '').split(/[,，、\s]+/).map((s) => parseInt(s, 10)).filter((n) => n >= 1 && n <= 31));
-  const isRest = restSet.has(now.getDate());
-  const earned = isRest ? 0 : elapsedSec / 3600 * wage;
+  const customMap = {};
+  String(env.CUSTOM_DAYS || '').split(/[;；\n]+/).forEach((part) => {
+    const mm = part.trim().match(/^(\d{1,2})\s*[:：]\s*([0-9]+(?:\.[0-9]+)?)\s*[:：]\s*([0-9]+(?:\.[0-9]+)?)$/);
+    if (mm) {
+      const dd = parseInt(mm[1], 10);
+      if (dd >= 1 && dd <= 31) customMap[dd] = { h: parseFloat(mm[2]), amt: Math.floor(parseFloat(mm[3])) };
+    }
+  });
+  const todayCustom = customMap[now.getDate()] || null;
+  const isRest = restSet.has(now.getDate()) && !todayCustom;
+  const earned = todayCustom ? todayCustom.amt : isRest ? 0 : elapsedSec / 3600 * wage;
   const yuan = Math.floor(earned);
   const pad2 = (n) => String(n).padStart(2, '0');
   const moneyText = `¥${yuan}元`;
@@ -93,6 +103,11 @@ async function handleWidget(ctx) {
   const cdChars = isRest ? ['今', '日', '休', '息'] : inLunch || (beforeStart && !afterEnd) ? ['距', '离', '上', '班'] : ['距', '离', '下', '班'];
   const lunchRange = lunchMin ? `${pad2(Math.floor(lunchMin.s / 60))}:${pad2(lunchMin.s % 60)}–${pad2(Math.floor(lunchMin.e / 60))}:${pad2(lunchMin.e % 60)}` : '';
   const timeRange = `${pad2(Math.floor(startMin / 60))}:${pad2(startMin % 60)}–${pad2(Math.floor(endMin / 60))}:${pad2(endMin % 60)}`;
+  let spanMin = endMin - startMin;
+  if (spanMin <= 0) spanMin += 1440;
+  const dayHours = (spanMin - (lunchMin ? lunchMin.e - lunchMin.s : 0)) / 60;
+  const dayAmount = Math.floor(dayHours * wage);
+  function fmtH(h) { return (Number.isInteger(h) ? String(h) : String(Math.round(h * 10) / 10)) + 'H'; }
 
   const refreshAfter = new Date(now.getTime() + 60000).toISOString();
 
@@ -232,30 +247,81 @@ async function handleWidget(ctx) {
   }
 
   if (family === 'systemLarge') {
+    const Y = now.getFullYear();
+    const MO = now.getMonth();
+    const daysInMonth = new Date(Y, MO + 1, 0).getDate();
+    const firstWday = new Date(Y, MO, 1).getDay();
+    const todayD = now.getDate();
+    const rows = Math.ceil((firstWday + daysInMonth) / 7);
+    const CAL_BLUE = { light: '#2F7CF6', dark: '#5EA1FF' };
+    const CELL_BG = { light: '#EAF3FE', dark: '#1F2A38' };
+    const CELL_BD = { light: '#A9CCF7', dark: '#33506E' };
+    const REST_BG = { light: '#E4F7EA', dark: '#1D3325' };
+    const REST_BD = { light: '#8FD3A6', dark: '#2F5D3E' };
+    const REST_TX = { light: '#1F9D55', dark: '#4CD964' };
+    const AMT_TX = { light: '#F08C1A', dark: '#FFB340' };
+    function dayCell(d) {
+      if (d < 1 || d > daysInMonth) return { type: 'stack', flex: 1, children: [{ type: 'spacer' }] };
+      const cust = customMap[d];
+      const rest = restSet.has(d) && !cust;
+      const isToday = d === todayD;
+      const kids = [{ type: 'spacer' }];
+      kids.push({ type: 'text', text: String(d), font: { size: 15, weight: 'bold' }, textColor: rest ? REST_TX : CAL_BLUE });
+      if (rest) {
+        kids.push({ type: 'text', text: '休', font: { size: 13, weight: 'bold' }, textColor: REST_TX });
+      } else if (cust) {
+        kids.push({ type: 'text', text: fmtH(cust.h), font: { size: 10, weight: 'bold' }, textColor: INK });
+        kids.push({ type: 'text', text: `${cust.amt}元`, font: { size: 10, weight: 'bold' }, textColor: AMT_TX });
+      } else if (d < todayD) {
+        kids.push({ type: 'text', text: fmtH(dayHours), font: { size: 10, weight: 'bold' }, textColor: INK });
+        kids.push({ type: 'text', text: `${dayAmount}元`, font: { size: 10, weight: 'bold' }, textColor: AMT_TX });
+      } else if (isToday) {
+        kids.push({ type: 'text', text: fmtH(elapsedSec / 3600), font: { size: 10, weight: 'bold' }, textColor: INK });
+        kids.push({ type: 'text', text: `${yuan}元`, font: { size: 10, weight: 'bold' }, textColor: AMT_TX });
+      }
+      kids.push({ type: 'spacer' });
+      return {
+        type: 'stack', direction: 'column', alignItems: 'center', flex: 1,
+        backgroundColor: rest ? REST_BG : CELL_BG,
+        borderColor: isToday ? CAL_BLUE : rest ? REST_BD : CELL_BD,
+        borderWidth: isToday ? 2.5 : 1,
+        borderRadius: 7,
+        children: kids,
+      };
+    }
+    const weekNames = ['日', '一', '二', '三', '四', '五', '六'];
+    const calKids = [
+      {
+        type: 'stack', direction: 'row', alignItems: 'center',
+        children: [
+          { type: 'text', text: '今日入账', font: { size: 16, weight: 'bold' }, textColor: INK },
+          { type: 'spacer' },
+          { type: 'text', text: `${Y}年${MO + 1}月`, font: { size: 14, weight: 'bold' }, textColor: INK },
+        ],
+      },
+      { type: 'spacer', length: 8 },
+      {
+        type: 'stack', direction: 'row',
+        children: weekNames.map((w) => ({
+          type: 'stack', flex: 1, direction: 'column', alignItems: 'center',
+          children: [{ type: 'text', text: w, font: { size: 11, weight: 'bold' }, textColor: SUB }],
+        })),
+      },
+      { type: 'spacer', length: 6 },
+    ];
+    for (let r = 0; r < rows; r++) {
+      if (r > 0) calKids.push({ type: 'spacer', length: 4 });
+      const cells = [];
+      for (let c = 0; c < 7; c++) {
+        if (c > 0) cells.push({ type: 'spacer', length: 4 });
+        cells.push(dayCell(r * 7 + c - firstWday + 1));
+      }
+      calKids.push({ type: 'stack', direction: 'row', flex: 1, children: cells });
+    }
     return {
       type: 'widget',
-      padding: [16, 20, 16, 20],
-      children: [
-        {
-          type: 'stack', direction: 'row', alignItems: 'center',
-          children: [
-            {
-              type: 'stack', direction: 'column', flex: 1,
-              children: [
-                { type: 'text', text: '今日入账', font: { size: 20, weight: 'bold' }, textColor: INK },
-                { type: 'spacer' },
-                amountRow(58, 18),
-                { type: 'spacer', length: 14 },
-                countdownRow(30, 24),
-                { type: 'spacer', length: 10 },
-                { type: 'text', text: lunchMin ? `时薪 ¥${wageText} · ${timeRange} · 午休 ${lunchRange} · ${status}` : `时薪 ¥${wageText} · ${timeRange} · ${status}`, font: { size: 12 }, textColor: SUB },
-              ],
-            },
-            { type: 'spacer', length: 8 },
-            charSticker(150, 182),
-          ],
-        },
-      ],
+      padding: [12, 14, 12, 14],
+      children: [{ type: 'stack', direction: 'column', children: calKids }],
       refreshAfter,
     };
   }
