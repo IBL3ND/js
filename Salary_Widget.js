@@ -4,6 +4,8 @@
  * 在模块设置里填写上班时间、下班时间和每小时工资，
  * 组件按已上班的时长实时计算今日入账，并显示距离下班的倒计时。
  *   WORK_START   上班时间，例：09:00
+ *   LUNCH_START  午休开始，例：12:00（不午休就清空）
+ *   LUNCH_END    午休结束，例：13:00（不午休就清空）
  *   WORK_END     下班时间，例：18:00
  *   HOURLY_WAGE  每小时工资，例：100
  */
@@ -34,6 +36,12 @@ async function handleWidget(ctx) {
 
   const startMin = parseTime(env.WORK_START, 9 * 60);
   const endMin = parseTime(env.WORK_END, 18 * 60);
+  let lunchMin = null;
+  if (env.LUNCH_START && env.LUNCH_END) {
+    const ls = parseTime(env.LUNCH_START, -1);
+    const le = parseTime(env.LUNCH_END, -1);
+    if (ls >= 0 && le > ls) lunchMin = { s: ls, e: le };
+  }
   let wage = parseFloat(String(env.HOURLY_WAGE == null ? '100' : env.HOURLY_WAGE).replace(/[^0-9.]/g, ''));
   if (isNaN(wage) || wage < 0) wage = 100;
   const wageText = Number.isInteger(wage) ? String(wage) : String(wage);
@@ -43,8 +51,26 @@ async function handleWidget(ctx) {
   let end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(endMin / 60), endMin % 60, 0);
   if (end.getTime() <= start.getTime()) end = new Date(end.getTime() + 24 * 3600 * 1000);
 
-  const totalSec = (end.getTime() - start.getTime()) / 1000;
-  const elapsedSec = Math.min(Math.max((now.getTime() - start.getTime()) / 1000, 0), totalSec);
+  let lunchStart = null;
+  let lunchEnd = null;
+  if (lunchMin) {
+    lunchStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(lunchMin.s / 60), lunchMin.s % 60, 0);
+    lunchEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(lunchMin.e / 60), lunchMin.e % 60, 0);
+    if (lunchStart.getTime() < start.getTime()) {
+      lunchStart = new Date(lunchStart.getTime() + 24 * 3600 * 1000);
+      lunchEnd = new Date(lunchEnd.getTime() + 24 * 3600 * 1000);
+    }
+  }
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  const workedToMs = Math.min(Math.max(now.getTime(), startMs), endMs);
+  let elapsedSec = (workedToMs - startMs) / 1000;
+  if (lunchStart) {
+    const oS = Math.max(startMs, lunchStart.getTime());
+    const oE = Math.min(workedToMs, lunchEnd.getTime());
+    if (oE > oS) elapsedSec -= (oE - oS) / 1000;
+  }
+  const inLunch = lunchStart ? now.getTime() >= lunchStart.getTime() && now.getTime() < lunchEnd.getTime() : false;
   const earned = elapsedSec / 3600 * wage;
   const yuan = Math.floor(earned);
   const pad2 = (n) => String(n).padStart(2, '0');
@@ -52,7 +78,10 @@ async function handleWidget(ctx) {
 
   const remainSec = Math.max(0, Math.floor((end.getTime() - now.getTime()) / 1000));
   const cdText = `${pad2(Math.floor(remainSec / 3600))}:${pad2(Math.floor(remainSec % 3600 / 60))}`;
-  const status = now.getTime() < start.getTime() ? '未上班' : now.getTime() > end.getTime() ? '已下班' : '赚钱中';
+  const status = now.getTime() < start.getTime() ? '未上班' : now.getTime() > end.getTime() ? '已下班' : inLunch ? '午休中' : '赚钱中';
+  const afterEnd = now.getTime() > end.getTime();
+  const cdDisplay = afterEnd ? '已下班' : inLunch ? '午休中' : cdText;
+  const lunchRange = lunchMin ? `${pad2(Math.floor(lunchMin.s / 60))}:${pad2(lunchMin.s % 60)}–${pad2(Math.floor(lunchMin.e / 60))}:${pad2(lunchMin.e % 60)}` : '';
   const timeRange = `${pad2(Math.floor(startMin / 60))}:${pad2(startMin % 60)}–${pad2(Math.floor(endMin / 60))}:${pad2(endMin % 60)}`;
 
   const refreshAfter = new Date(now.getTime() + 60000).toISOString();
@@ -104,7 +133,7 @@ async function handleWidget(ctx) {
         circleChar('下', circle),
         circleChar('班', circle),
         { type: 'spacer', length: 8 },
-        { type: 'text', text: cdText, font: { size: timeSize, weight: 'bold' }, textColor: INK },
+        { type: 'text', text: cdDisplay, font: { size: timeSize, weight: 'bold' }, textColor: INK },
       ],
     };
   }
@@ -143,7 +172,7 @@ async function handleWidget(ctx) {
       type: 'widget',
       padding: 0,
       children: [
-        { type: 'text', text: `今日入账 ${moneyText} · 距下班 ${cdText}`, font: { size: 12 } },
+        { type: 'text', text: afterEnd ? `今日入账 ${moneyText} · 已下班` : inLunch ? `今日入账 ${moneyText} · 午休中` : `今日入账 ${moneyText} · 距下班 ${cdText}`, font: { size: 12 } },
       ],
       refreshAfter,
     };
@@ -164,7 +193,7 @@ async function handleWidget(ctx) {
                 { type: 'text', text: moneyText, font: { size: 12, weight: 'bold' } },
               ],
             },
-            { type: 'text', text: `距下班 ${cdText} · ${status}`, font: { size: 11 } },
+            { type: 'text', text: afterEnd ? '已下班' : `距下班 ${cdText} · ${status}`, font: { size: 11 } },
           ],
         },
       ],
@@ -211,7 +240,7 @@ async function handleWidget(ctx) {
                 { type: 'spacer', length: 14 },
                 countdownRow(30, 24),
                 { type: 'spacer', length: 10 },
-                { type: 'text', text: `时薪 ¥${wageText} · ${timeRange} · ${status}`, font: { size: 12 }, textColor: SUB },
+                { type: 'text', text: lunchMin ? `时薪 ¥${wageText} · ${timeRange} · 午休 ${lunchRange} · ${status}` : `时薪 ¥${wageText} · ${timeRange} · ${status}`, font: { size: 12 }, textColor: SUB },
               ],
             },
             { type: 'spacer', length: 8 },
