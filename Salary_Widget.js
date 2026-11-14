@@ -85,11 +85,12 @@ async function handleWidget(ctx) {
   }
   const cdText = fmtCd(end.getTime());
   const cdStartText = fmtCd(start.getTime());
+  const cdLunchText = lunchEnd ? fmtCd(lunchEnd.getTime()) : '';
   const beforeStart = now.getTime() < start.getTime();
   const status = isRest ? '今日休息' : now.getTime() < start.getTime() ? '未上班' : now.getTime() > end.getTime() ? '已下班' : inLunch ? '午休中' : '赚钱中';
   const afterEnd = now.getTime() > end.getTime();
-  const cdDisplay = afterEnd ? '已下班' : inLunch ? '午休中' : beforeStart ? cdStartText : cdText;
-  const cdChars = isRest ? ['今', '日', '休', '息'] : beforeStart && !afterEnd ? ['距', '离', '上', '班'] : ['距', '离', '下', '班'];
+  const cdDisplay = afterEnd ? '已下班' : inLunch ? cdLunchText : beforeStart ? cdStartText : cdText;
+  const cdChars = isRest ? ['今', '日', '休', '息'] : inLunch || (beforeStart && !afterEnd) ? ['距', '离', '上', '班'] : ['距', '离', '下', '班'];
   const lunchRange = lunchMin ? `${pad2(Math.floor(lunchMin.s / 60))}:${pad2(lunchMin.s % 60)}–${pad2(Math.floor(lunchMin.e / 60))}:${pad2(lunchMin.e % 60)}` : '';
   const timeRange = `${pad2(Math.floor(startMin / 60))}:${pad2(startMin % 60)}–${pad2(Math.floor(endMin / 60))}:${pad2(endMin % 60)}`;
 
@@ -179,7 +180,7 @@ async function handleWidget(ctx) {
       type: 'widget',
       padding: 0,
       children: [
-        { type: 'text', text: isRest ? `今日入账 ${moneyText} · 今日休息` : afterEnd ? `今日入账 ${moneyText} · 已下班` : inLunch ? `今日入账 ${moneyText} · 午休中` : beforeStart ? `今日入账 ${moneyText} · 距上班 ${cdStartText}` : `今日入账 ${moneyText} · 距下班 ${cdText}`, font: { size: 12 } },
+        { type: 'text', text: isRest ? `今日入账 ${moneyText} · 今日休息` : afterEnd ? `今日入账 ${moneyText} · 已下班` : inLunch ? `今日入账 ${moneyText} · 距上班 ${cdLunchText}` : beforeStart ? `今日入账 ${moneyText} · 距上班 ${cdStartText}` : `今日入账 ${moneyText} · 距下班 ${cdText}`, font: { size: 12 } },
       ],
       refreshAfter,
     };
@@ -200,7 +201,7 @@ async function handleWidget(ctx) {
                 { type: 'text', text: moneyText, font: { size: 12, weight: 'bold' } },
               ],
             },
-            { type: 'text', text: isRest ? '今日休息' : afterEnd ? '已下班' : beforeStart ? `距上班 ${cdStartText} · ${status}` : `距下班 ${cdText} · ${status}`, font: { size: 11 } },
+            { type: 'text', text: isRest ? '今日休息' : afterEnd ? '已下班' : inLunch ? `距上班 ${cdLunchText} · 午休中` : beforeStart ? `距上班 ${cdStartText} · ${status}` : `距下班 ${cdText} · ${status}`, font: { size: 11 } },
           ],
         },
       ],
