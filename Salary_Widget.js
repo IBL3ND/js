@@ -354,7 +354,7 @@ async function handleWidget(ctx) {
               { type: 'spacer' },
               amountRow(44, 15),
               { type: 'spacer', length: 10 },
-              countdownRow(25, 20),
+              countdownRow(25, 26),
             ],
           },
           { type: 'spacer', length: 6 },
