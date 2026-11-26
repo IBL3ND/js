@@ -17,8 +17,9 @@
  *   • 锁屏    : 矩形显示最近 1 笔，单行显示最新动态
  *
  * 🔔 监控说明：
- *   每次刷新拉取最新记录，与上次记录对比，有新转账时推送一条通知；
- *   刷新节奏由 iOS 系统预算决定，不是秒级实时。
+ *   通知由模块的定时脚本负责：每 10 分钟自动拉取最新记录，与上次记录对比，
+ *   有新转账时推送一条通知；小组件只负责展示，不再承担通知，
+ *   避免被 iOS 小组件刷新预算拖延。
  * ════════════════════════════════════════════════════
  */
 
@@ -26,6 +27,7 @@ export default async function (ctx) {
   const safeCtx = ctx || {};
   const env = safeCtx.env || {};
   const family = safeCtx.widgetFamily || 'systemSmall';
+  const IS_SCHEDULE = typeof safeCtx.cron === 'string' && safeCtx.cron.length > 0;
 
   const CHAIN = String(env.CHAIN || 'TRON').trim().toUpperCase();
   const ADDRESS = String(env.ADDRESS || '').replace(/\s+/g, '');
@@ -369,7 +371,7 @@ export default async function (ctx) {
       txs.sort((a, b) => b.ts - a.ts);
       state = { status: txs.length ? 'ok' : 'empty', txs, fetchedAt: Date.now(), errMsg: '' };
       storeSet(cacheKey, { ts: Date.now(), txs });
-      if (NOTIFY && txs.length) {
+      if (IS_SCHEDULE && NOTIFY && txs.length) {
         const last = storeGet(lastKey);
         const newest = txs[0];
         if (last && last.id && last.id !== newest.id) {
@@ -396,6 +398,8 @@ export default async function (ctx) {
     }
   }
 
+
+  if (IS_SCHEDULE) return;
 
   const titleRow = () => ({
     type: 'stack', direction: 'row', alignItems: 'center', children: [
